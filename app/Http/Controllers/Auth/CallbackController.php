@@ -20,27 +20,35 @@ class CallbackController extends Controller
     /**
      * Handle the OAuth callback from Genuka.
      *
+     * IMPORTANT: According to Genuka OAuth guide:
+     * - Use redirect_to value EXACTLY as received (URL-encoded) for HMAC verification
+     * - Decode redirect_to ONLY for the actual HTTP redirect
+     *
      * @param Request $request
      * @return RedirectResponse
      */
     public function __invoke(Request $request): RedirectResponse
     {
+
         // Validate required parameters
         $validated = $request->validate([
             'code' => 'required|string',
             'company_id' => 'required|string',
             'timestamp' => 'required|string',
             'hmac' => 'required|string',
-            'redirect_to' => 'nullable|url',
+            'redirect_to' => 'required|string',
         ]);
+        // Get raw redirect_to parameter (URL-encoded as received)
+        $redirectToEncoded = $request->query('redirect_to');
 
         try {
-            // Process OAuth callback
+            // Process OAuth callback with URL-encoded redirect_to for HMAC
             $company = $this->oauthService->handleCallback(
                 code: $validated['code'],
                 companyId: $validated['company_id'],
                 timestamp: $validated['timestamp'],
-                hmac: $validated['hmac']
+                hmac: $validated['hmac'],
+                redirectTo: $redirectToEncoded // Use encoded value for HMAC
             );
 
             Log::info('OAuth callback successful', [
@@ -48,19 +56,16 @@ class CallbackController extends Controller
                 'company_name' => $company->name,
             ]);
 
-            // Redirect to specified URL or default redirect
-            $redirectUrl = $validated['redirect_to'] ?? config('genuka.default_redirect');
+            // Decode redirect_to ONLY for the actual HTTP redirect
+            $redirectUrlDecoded = urldecode($validated['redirect_to']);
 
-            return redirect($redirectUrl)->with('success', 'Successfully connected to Genuka!');
+            return redirect($redirectUrlDecoded)->with('success', 'Successfully connected to Genuka!');
         } catch (\Exception $e) {
             Log::error('OAuth callback error', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
-
-            // Redirect back with error message
-            return redirect(config('genuka.default_redirect'))
-                ->with('error', 'Failed to connect to Genuka. Please try again.');
+            throw $e;
         }
     }
 }

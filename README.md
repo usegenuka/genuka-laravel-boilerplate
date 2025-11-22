@@ -253,16 +253,44 @@ Access tokens are automatically encrypted when stored in the database using Lara
 
 ### HMAC Validation
 
-Both OAuth callbacks and webhooks validate HMAC signatures to ensure request authenticity:
+OAuth callbacks validate HMAC signatures to ensure request authenticity. The implementation follows the official Genuka OAuth guide:
+
+**Critical Implementation Details:**
+
+1. Build params array with ALL query parameters (including `redirect_to`)
+2. Sort parameters alphabetically by key (`ksort`)
+3. Build query string (`http_build_query`)
+4. Calculate HMAC SHA-256
 
 ```php
-$message = $code . $companyId . $timestamp;
-$expectedHmac = hash_hmac('sha256', $message, config('genuka.client_secret'));
+// Build params object with ALL query parameters
+$params = [
+    'code' => $code,
+    'company_id' => $companyId,
+    'redirect_to' => $redirectTo, // Keep URL-encoded as received
+    'timestamp' => $timestamp,
+];
 
+// Sort parameters alphabetically by key
+ksort($params);
+
+// Build query string
+$queryString = http_build_query($params);
+
+// Calculate expected HMAC
+$expectedHmac = hash_hmac('sha256', $queryString, config('genuka.client_secret'));
+
+// Compare HMACs in constant time to prevent timing attacks
 if (!hash_equals($expectedHmac, $hmac)) {
     throw new \Exception('Invalid HMAC signature');
 }
 ```
+
+**Important Notes:**
+- Use `redirect_to` value exactly as received (URL-encoded) for HMAC verification
+- Decode `redirect_to` only for the actual HTTP redirect
+- Never skip HMAC validation
+- Use constant-time comparison (`hash_equals`) to prevent timing attacks
 
 ### Timestamp Validation
 

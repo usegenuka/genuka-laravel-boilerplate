@@ -16,6 +16,7 @@ class OAuthService
      * @param string $companyId
      * @param string $timestamp
      * @param string $hmac
+     * @param string $redirectTo
      * @return Company
      * @throws \Exception
      */
@@ -23,11 +24,12 @@ class OAuthService
         string $code,
         string $companyId,
         string $timestamp,
-        string $hmac
+        string $hmac,
+        string $redirectTo
     ): Company {
         try {
             // Validate HMAC signature
-            $this->validateHmac($code, $companyId, $timestamp, $hmac);
+            $this->validateHmac($code, $companyId, $timestamp, $hmac, $redirectTo);
 
             // Exchange authorization code for access token
             $accessToken = $this->exchangeCodeForToken($code);
@@ -62,6 +64,7 @@ class OAuthService
      * @param string $companyId
      * @param string $timestamp
      * @param string $hmac
+     * @param string $redirectTo Keep URL-encoded value as received
      * @return void
      * @throws \Exception
      */
@@ -69,20 +72,26 @@ class OAuthService
         string $code,
         string $companyId,
         string $timestamp,
-        string $hmac
+        string $hmac,
+        string $redirectTo
     ): void {
-        // Build the message to verify
-        $message = $code . $companyId . $timestamp;
+        $params = [
+            'code' => $code,
+            'company_id' => $companyId,
+            'redirect_to' => $redirectTo, // Keep URL-encoded as received
+            'timestamp' => $timestamp,
+        ];
 
-        // Calculate expected HMAC
-        $expectedHmac = hash_hmac('sha256', $message, config('genuka.client_secret'));
+        ksort($params);
 
-        // Compare HMACs in constant time to prevent timing attacks
+        $queryString = http_build_query($params);
+
+        $expectedHmac = hash_hmac('sha256', $queryString, config('genuka.client_secret'));
         if (!hash_equals($expectedHmac, $hmac)) {
             throw new \Exception('Invalid HMAC signature');
         }
 
-        // Validate timestamp (within 5 minutes)
+        // Validate timestamp (within 5 minutes)        
         $currentTime = time();
         $requestTime = (int) $timestamp;
         $timeDifference = abs($currentTime - $requestTime);

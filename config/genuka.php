@@ -47,17 +47,6 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Default Redirect After OAuth
-    |--------------------------------------------------------------------------
-    |
-    | The default URL to redirect users to after successful OAuth
-    | authentication. Can be overridden by the redirect_to parameter.
-    |
-    */
-    'default_redirect' => env('GENUKA_DEFAULT_REDIRECT', '/dashboard'),
-
-    /*
-    |--------------------------------------------------------------------------
     | Token Encryption
     |--------------------------------------------------------------------------
     |
