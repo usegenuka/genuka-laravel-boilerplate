@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\CallbackController;
+use App\Http\Controllers\Auth\LogoutController;
 use App\Http\Controllers\Auth\WebhookController;
 use Illuminate\Support\Facades\Route;
 
@@ -18,6 +19,9 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('auth')->group(function () {
     // OAuth callback route
     Route::get('/callback', CallbackController::class)->name('auth.callback');
+
+    // Logout route
+    Route::post('/logout', LogoutController::class)->name('auth.logout');
 
     // Webhook route
     Route::post('/webhook', WebhookController::class)->name('auth.webhook');

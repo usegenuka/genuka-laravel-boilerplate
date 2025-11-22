@@ -316,21 +316,8 @@ php artisan test
 ```bash
 # Laravel Pint (code formatting)
 ./vendor/bin/pint
-
-# PHPStan (static analysis)
-./vendor/bin/phpstan analyse
 ```
 
-### Logging
-
-All OAuth and webhook events are logged for debugging:
-
-```php
-Log::info('OAuth callback completed successfully', [
-    'company_id' => $companyId,
-    'company_name' => $company->name,
-]);
-```
 
 Logs are stored in `storage/logs/laravel.log`.
 
@@ -366,44 +353,6 @@ php artisan view:cache
 composer install --optimize-autoloader --no-dev
 ```
 
-### Web Server Configuration
-
-#### Nginx
-
-```nginx
-server {
-    listen 80;
-    server_name yourdomain.com;
-    root /path/to/genuka-laravel-boilerplate/public;
-
-    add_header X-Frame-Options "SAMEORIGIN";
-    add_header X-Content-Type-Options "nosniff";
-
-    index index.php;
-
-    charset utf-8;
-
-    location / {
-        try_files $uri $uri/ /index.php?$query_string;
-    }
-
-    location = /favicon.ico { access_log off; log_not_found off; }
-    location = /robots.txt  { access_log off; log_not_found off; }
-
-    error_page 404 /index.php;
-
-    location ~ \.php$ {
-        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
-        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
-        include fastcgi_params;
-    }
-
-    location ~ /\.(?!well-known).* {
-        deny all;
-    }
-}
-```
-
 ## Troubleshooting
 
 ### Common Issues
@@ -428,25 +377,8 @@ server {
 - Ensure `GENUKA_REDIRECT_URI` matches exactly with Genuka dashboard
 - Check authorization code hasn't been used already
 
-#### 3. Database Connection Issues
 
-**Cause**: Incorrect database credentials or missing database.
-
-**Solution**:
-
-```bash
-# For SQLite
-touch database/database.sqlite
-php artisan migrate
-
-# For MySQL
-mysql -u root -p
-CREATE DATABASE genuka_laravel;
-exit
-php artisan migrate
-```
-
-#### 4. Access Token Decryption Fails
+#### 3. Access Token Decryption Fails
 
 **Cause**: `APP_KEY` changed after storing encrypted tokens.
 

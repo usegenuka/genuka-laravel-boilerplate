@@ -11,9 +11,6 @@ class WebhookController extends Controller
 {
     /**
      * Handle incoming webhook events from Genuka.
-     *
-     * @param Request $request
-     * @return JsonResponse
      */
     public function __invoke(Request $request): JsonResponse
     {
@@ -23,12 +20,6 @@ class WebhookController extends Controller
 
             // Validate webhook signature if provided
             $this->validateWebhookSignature($request);
-
-            // Log the webhook event
-            Log::info('Genuka webhook received', [
-                'event_type' => $event['type'] ?? 'unknown',
-                'event_data' => $event,
-            ]);
 
             // Process the webhook event based on type
             $this->processWebhookEvent($event);
@@ -54,33 +45,29 @@ class WebhookController extends Controller
     /**
      * Validate webhook signature for security.
      *
-     * @param Request $request
-     * @return void
      * @throws \Exception
      */
     protected function validateWebhookSignature(Request $request): void
     {
         $signature = $request->header('X-Genuka-Signature');
 
-        if (!$signature) {
+        if (! $signature) {
             // If signature validation is optional, you can remove this exception
             Log::warning('Webhook received without signature');
+
             return;
         }
 
         $payload = $request->getContent();
         $expectedSignature = hash_hmac('sha256', $payload, config('genuka.client_secret'));
 
-        if (!hash_equals($expectedSignature, $signature)) {
+        if (! hash_equals($expectedSignature, $signature)) {
             throw new \Exception('Invalid webhook signature');
         }
     }
 
     /**
      * Process webhook event based on type.
-     *
-     * @param array $event
-     * @return void
      */
     protected function processWebhookEvent(array $event): void
     {
@@ -100,9 +87,6 @@ class WebhookController extends Controller
 
     /**
      * Handle company updated event.
-     *
-     * @param array $event
-     * @return void
      */
     protected function handleCompanyUpdated(array $event): void
     {
@@ -114,9 +98,6 @@ class WebhookController extends Controller
 
     /**
      * Handle company deleted event.
-     *
-     * @param array $event
-     * @return void
      */
     protected function handleCompanyDeleted(array $event): void
     {
@@ -128,9 +109,6 @@ class WebhookController extends Controller
 
     /**
      * Handle subscription created event.
-     *
-     * @param array $event
-     * @return void
      */
     protected function handleSubscriptionCreated(array $event): void
     {
@@ -141,9 +119,6 @@ class WebhookController extends Controller
 
     /**
      * Handle subscription updated event.
-     *
-     * @param array $event
-     * @return void
      */
     protected function handleSubscriptionUpdated(array $event): void
     {
@@ -154,9 +129,6 @@ class WebhookController extends Controller
 
     /**
      * Handle subscription cancelled event.
-     *
-     * @param array $event
-     * @return void
      */
     protected function handleSubscriptionCancelled(array $event): void
     {
@@ -167,9 +139,6 @@ class WebhookController extends Controller
 
     /**
      * Handle payment succeeded event.
-     *
-     * @param array $event
-     * @return void
      */
     protected function handlePaymentSucceeded(array $event): void
     {
@@ -180,9 +149,6 @@ class WebhookController extends Controller
 
     /**
      * Handle payment failed event.
-     *
-     * @param array $event
-     * @return void
      */
     protected function handlePaymentFailed(array $event): void
     {
@@ -193,9 +159,6 @@ class WebhookController extends Controller
 
     /**
      * Handle unknown event type.
-     *
-     * @param array $event
-     * @return void
      */
     protected function handleUnknownEvent(array $event): void
     {

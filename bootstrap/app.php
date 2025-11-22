@@ -12,7 +12,14 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->alias([
+            'auth.genuka' => \App\Http\Middleware\AuthenticateGenuka::class,
+        ]);
+
+        // Use custom EncryptCookies middleware to exclude genuka_session
+        $middleware->encryptCookies(except: [
+            'genuka_session',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

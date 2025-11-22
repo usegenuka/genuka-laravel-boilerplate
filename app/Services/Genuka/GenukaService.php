@@ -9,7 +9,12 @@ use Illuminate\Support\Facades\Log;
 class GenukaService implements GenukaServiceInterface
 {
     protected ?string $accessToken = null;
+
+    protected ?string $companyId = null;
+
     protected string $baseUrl;
+
+    protected $httpClient = null;
 
     /**
      * Create a new Genuka service instance.
@@ -21,36 +26,74 @@ class GenukaService implements GenukaServiceInterface
 
     /**
      * Set the access token for API requests.
-     *
-     * @param string $accessToken
-     * @return self
      */
     public function setAccessToken(string $accessToken): self
     {
         $this->accessToken = $accessToken;
+        $this->httpClient = null; // Reset client when token changes
+
         return $this;
+    }
+
+    /**
+     * Set the company ID for API requests.
+     */
+    public function setCompanyId(string $companyId): self
+    {
+        $this->companyId = $companyId;
+        $this->httpClient = null; // Reset client when company changes
+
+        return $this;
+    }
+
+    /**
+     * Get configured HTTP client instance (singleton pattern).
+     *
+     * @return \Illuminate\Http\Client\PendingRequest
+     */
+    private function getHttpClient()
+    {
+        // Return existing instance if available
+        if ($this->httpClient !== null) {
+            return $this->httpClient;
+        }
+
+        // Create new instance
+        $http = Http::withToken($this->accessToken);
+
+        // Add X-Company header only if companyId is set
+        if ($this->companyId) {
+            $http = $http->withHeader('X-Company', $this->companyId);
+        }
+
+        // Disable SSL verification for local development
+        if (app()->environment('local')) {
+            $http = $http->withoutVerifying();
+        }
+
+        // Store and return the instance
+        $this->httpClient = $http;
+
+        return $this->httpClient;
     }
 
     /**
      * Get company information by ID.
      *
-     * @param string $companyId
-     * @return array
      * @throws \Exception
      */
     public function getCompany(string $companyId): array
     {
-        $response = Http::withToken($this->accessToken)
-            ->get("{$this->baseUrl}/api/companies/{$companyId}");
+        $response = $this->getHttpClient()->get("{$this->baseUrl}/2023-11/admin/company");
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             Log::error('Failed to fetch company info', [
                 'company_id' => $companyId,
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
 
-            throw new \Exception('Failed to fetch company information: ' . $response->body());
+            throw new \Exception('Failed to fetch company information: '.$response->body());
         }
 
         return $response->json();
@@ -59,24 +102,20 @@ class GenukaService implements GenukaServiceInterface
     /**
      * Make a GET request to the Genuka API.
      *
-     * @param string $endpoint
-     * @param array $params
-     * @return array
      * @throws \Exception
      */
     public function get(string $endpoint, array $params = []): array
     {
-        $response = Http::withToken($this->accessToken)
-            ->get("{$this->baseUrl}/{$endpoint}", $params);
+        $response = $this->getHttpClient()->get("{$this->baseUrl}/{$endpoint}", $params);
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             Log::error('Genuka API GET request failed', [
                 'endpoint' => $endpoint,
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
 
-            throw new \Exception('Genuka API request failed: ' . $response->body());
+            throw new \Exception('Genuka API request failed: '.$response->body());
         }
 
         return $response->json();
@@ -85,24 +124,20 @@ class GenukaService implements GenukaServiceInterface
     /**
      * Make a POST request to the Genuka API.
      *
-     * @param string $endpoint
-     * @param array $data
-     * @return array
      * @throws \Exception
      */
     public function post(string $endpoint, array $data = []): array
     {
-        $response = Http::withToken($this->accessToken)
-            ->post("{$this->baseUrl}/{$endpoint}", $data);
+        $response = $this->getHttpClient()->post("{$this->baseUrl}/{$endpoint}", $data);
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             Log::error('Genuka API POST request failed', [
                 'endpoint' => $endpoint,
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
 
-            throw new \Exception('Genuka API request failed: ' . $response->body());
+            throw new \Exception('Genuka API request failed: '.$response->body());
         }
 
         return $response->json();
@@ -111,24 +146,20 @@ class GenukaService implements GenukaServiceInterface
     /**
      * Make a PUT request to the Genuka API.
      *
-     * @param string $endpoint
-     * @param array $data
-     * @return array
      * @throws \Exception
      */
     public function put(string $endpoint, array $data = []): array
     {
-        $response = Http::withToken($this->accessToken)
-            ->put("{$this->baseUrl}/{$endpoint}", $data);
+        $response = $this->getHttpClient()->put("{$this->baseUrl}/{$endpoint}", $data);
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             Log::error('Genuka API PUT request failed', [
                 'endpoint' => $endpoint,
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
 
-            throw new \Exception('Genuka API request failed: ' . $response->body());
+            throw new \Exception('Genuka API request failed: '.$response->body());
         }
 
         return $response->json();
@@ -137,23 +168,20 @@ class GenukaService implements GenukaServiceInterface
     /**
      * Make a DELETE request to the Genuka API.
      *
-     * @param string $endpoint
-     * @return array
      * @throws \Exception
      */
     public function delete(string $endpoint): array
     {
-        $response = Http::withToken($this->accessToken)
-            ->delete("{$this->baseUrl}/{$endpoint}");
+        $response = $this->getHttpClient()->delete("{$this->baseUrl}/{$endpoint}");
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             Log::error('Genuka API DELETE request failed', [
                 'endpoint' => $endpoint,
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
 
-            throw new \Exception('Genuka API request failed: ' . $response->body());
+            throw new \Exception('Genuka API request failed: '.$response->body());
         }
 
         return $response->json();

@@ -12,12 +12,6 @@ class OAuthService
     /**
      * Handle OAuth callback and complete authorization flow.
      *
-     * @param string $code
-     * @param string $companyId
-     * @param string $timestamp
-     * @param string $hmac
-     * @param string $redirectTo
-     * @return Company
      * @throws \Exception
      */
     public function handleCallback(
@@ -40,11 +34,6 @@ class OAuthService
             // Store or update company in database
             $company = $this->storeCompany($companyId, $code, $accessToken, $companyData);
 
-            Log::info('OAuth callback completed successfully', [
-                'company_id' => $companyId,
-                'company_name' => $company->name,
-            ]);
-
             return $company;
         } catch (\Exception $e) {
             Log::error('OAuth callback failed', [
@@ -60,12 +49,8 @@ class OAuthService
     /**
      * Validate HMAC signature for security.
      *
-     * @param string $code
-     * @param string $companyId
-     * @param string $timestamp
-     * @param string $hmac
-     * @param string $redirectTo Keep URL-encoded value as received
-     * @return void
+     * @param  string  $redirectTo  Keep URL-encoded value as received
+     *
      * @throws \Exception
      */
     protected function validateHmac(
@@ -75,23 +60,28 @@ class OAuthService
         string $hmac,
         string $redirectTo
     ): void {
+        // Keep redirect_to as-is (already URL-encoded once by Genuka)
+        // http_build_query will encode it a second time, matching Genuka's double encoding
         $params = [
             'code' => $code,
             'company_id' => $companyId,
-            'redirect_to' => $redirectTo, // Keep URL-encoded as received
+            'redirect_to' => $redirectTo, // Already encoded, keep as-is
             'timestamp' => $timestamp,
         ];
 
+        // Sort alphabetically (same as Genuka)
         ksort($params);
 
+        // Build query string (http_build_query will encode redirect_to again = double encoding)
         $queryString = http_build_query($params);
 
         $expectedHmac = hash_hmac('sha256', $queryString, config('genuka.client_secret'));
-        if (!hash_equals($expectedHmac, $hmac)) {
+
+        if (! hash_equals($expectedHmac, $hmac)) {
             throw new \Exception('Invalid HMAC signature');
         }
 
-        // Validate timestamp (within 5 minutes)        
+        // Validate timestamp (within 5 minutes)
         $currentTime = time();
         $requestTime = (int) $timestamp;
         $timeDifference = abs($currentTime - $requestTime);
@@ -104,13 +94,18 @@ class OAuthService
     /**
      * Exchange authorization code for access token.
      *
-     * @param string $code
-     * @return string
      * @throws \Exception
      */
     protected function exchangeCodeForToken(string $code): string
     {
-        $response = Http::asForm()->post(config('genuka.url') . '/oauth/token', [
+        $http = Http::asForm();
+
+        // Disable SSL verification for local development
+        if (app()->environment('local')) {
+            $http = $http->withoutVerifying();
+        }
+
+        $response = $http->post(config('genuka.url').'/oauth/token', [
             'grant_type' => 'authorization_code',
             'code' => $code,
             'client_id' => config('genuka.client_id'),
@@ -118,18 +113,18 @@ class OAuthService
             'redirect_uri' => config('genuka.redirect_uri'),
         ]);
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             Log::error('Token exchange failed', [
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
 
-            throw new \Exception('Failed to exchange code for token: ' . $response->body());
+            throw new \Exception('Failed to exchange code for token: '.$response->body());
         }
 
         $data = $response->json();
 
-        if (!isset($data['access_token'])) {
+        if (! isset($data['access_token'])) {
             throw new \Exception('Access token not found in response');
         }
 
@@ -139,24 +134,17 @@ class OAuthService
     /**
      * Fetch company information from Genuka API.
      *
-     * @param string $companyId
-     * @param string $accessToken
-     * @return array
      * @throws \Exception
      */
     protected function fetchCompanyInfo(string $companyId, string $accessToken): array
     {
-        return Genuka::setAccessToken($accessToken)->getCompany($companyId);
+        return Genuka::setAccessToken($accessToken)
+            ->setCompanyId($companyId)
+            ->getCompany($companyId);
     }
 
     /**
      * Store or update company in database.
-     *
-     * @param string $companyId
-     * @param string $code
-     * @param string $accessToken
-     * @param array $companyData
-     * @return Company
      */
     protected function storeCompany(
         string $companyId,

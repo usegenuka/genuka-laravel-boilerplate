@@ -60,8 +60,7 @@ class Company extends Model
     /**
      * Get the access token attribute with automatic decryption.
      *
-     * @param string|null $value
-     * @return string|null
+     * @param  string|null  $value
      */
     public function getAccessTokenAttribute($value): ?string
     {
@@ -77,13 +76,13 @@ class Company extends Model
     /**
      * Set the access token attribute with automatic encryption.
      *
-     * @param string|null $value
-     * @return void
+     * @param  string|null  $value
      */
     public function setAccessTokenAttribute($value): void
     {
         if (is_null($value)) {
             $this->attributes['access_token'] = null;
+
             return;
         }
 

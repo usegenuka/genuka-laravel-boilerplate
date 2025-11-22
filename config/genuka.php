@@ -10,7 +10,7 @@ return [
     | including OAuth token exchange and company data retrieval.
     |
     */
-    'url' => env('GENUKA_URL', 'https://api.genuka.com'),
+    'url' => env('GENUKA_URL', 'https://api-staging.genuka.com'),
 
     /*
     |--------------------------------------------------------------------------
@@ -43,7 +43,7 @@ return [
     | This should match the callback endpoint in your application.
     |
     */
-    'redirect_uri' => env('GENUKA_REDIRECT_URI', 'http://localhost:8000/api/auth/callback'),
+    'redirect_uri' => env('GENUKA_REDIRECT_URI'),
 
     /*
     |--------------------------------------------------------------------------

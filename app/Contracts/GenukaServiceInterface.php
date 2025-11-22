@@ -6,17 +6,17 @@ interface GenukaServiceInterface
 {
     /**
      * Set the access token for API requests.
-     *
-     * @param string $accessToken
-     * @return self
      */
     public function setAccessToken(string $accessToken): self;
 
     /**
+     * Set the company ID for API requests.
+     */
+    public function setCompanyId(string $companyId): self;
+
+    /**
      * Get company information by ID.
      *
-     * @param string $companyId
-     * @return array
      * @throws \Exception
      */
     public function getCompany(string $companyId): array;
@@ -24,9 +24,6 @@ interface GenukaServiceInterface
     /**
      * Make a GET request to the Genuka API.
      *
-     * @param string $endpoint
-     * @param array $params
-     * @return array
      * @throws \Exception
      */
     public function get(string $endpoint, array $params = []): array;
@@ -34,9 +31,6 @@ interface GenukaServiceInterface
     /**
      * Make a POST request to the Genuka API.
      *
-     * @param string $endpoint
-     * @param array $data
-     * @return array
      * @throws \Exception
      */
     public function post(string $endpoint, array $data = []): array;
@@ -44,9 +38,6 @@ interface GenukaServiceInterface
     /**
      * Make a PUT request to the Genuka API.
      *
-     * @param string $endpoint
-     * @param array $data
-     * @return array
      * @throws \Exception
      */
     public function put(string $endpoint, array $data = []): array;
@@ -54,8 +45,6 @@ interface GenukaServiceInterface
     /**
      * Make a DELETE request to the Genuka API.
      *
-     * @param string $endpoint
-     * @return array
      * @throws \Exception
      */
     public function delete(string $endpoint): array;

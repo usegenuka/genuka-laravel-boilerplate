@@ -14,7 +14,7 @@ class GenukaServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton('genuka', function ($app) {
-            return new GenukaService();
+            return new GenukaService;
         });
 
         $this->app->bind(GenukaServiceInterface::class, function ($app) {
