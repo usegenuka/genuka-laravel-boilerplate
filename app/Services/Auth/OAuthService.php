@@ -19,27 +19,41 @@ class OAuthService
         string $companyId,
         string $timestamp,
         string $hmac,
-        string $redirectTo
+        string $redirectTo,
     ): Company {
         try {
             // Validate HMAC signature
-            $this->validateHmac($code, $companyId, $timestamp, $hmac, $redirectTo);
+            $this->validateHmac(
+                $code,
+                $companyId,
+                $timestamp,
+                $hmac,
+                $redirectTo,
+            );
 
-            // Exchange authorization code for access token
-            $accessToken = $this->exchangeCodeForToken($code);
+            // Exchange authorization code for tokens
+            $tokenData = $this->exchangeCodeForToken($code);
 
             // Fetch company information from Genuka API
-            $companyData = $this->fetchCompanyInfo($companyId, $accessToken);
+            $companyData = $this->fetchCompanyInfo(
+                $companyId,
+                $tokenData["access_token"],
+            );
 
             // Store or update company in database
-            $company = $this->storeCompany($companyId, $code, $accessToken, $companyData);
+            $company = $this->storeCompany(
+                $companyId,
+                $code,
+                $tokenData,
+                $companyData,
+            );
 
             return $company;
         } catch (\Exception $e) {
-            Log::error('OAuth callback failed', [
-                'company_id' => $companyId,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString(),
+            Log::error("OAuth callback failed", [
+                "company_id" => $companyId,
+                "error" => $e->getMessage(),
+                "trace" => $e->getTraceAsString(),
             ]);
 
             throw $e;
@@ -58,15 +72,15 @@ class OAuthService
         string $companyId,
         string $timestamp,
         string $hmac,
-        string $redirectTo
+        string $redirectTo,
     ): void {
         // Keep redirect_to as-is (already URL-encoded once by Genuka)
         // http_build_query will encode it a second time, matching Genuka's double encoding
         $params = [
-            'code' => $code,
-            'company_id' => $companyId,
-            'redirect_to' => $redirectTo, // Already encoded, keep as-is
-            'timestamp' => $timestamp,
+            "code" => $code,
+            "company_id" => $companyId,
+            "redirect_to" => $redirectTo, // Already encoded, keep as-is
+            "timestamp" => $timestamp,
         ];
 
         // Sort alphabetically (same as Genuka)
@@ -75,10 +89,14 @@ class OAuthService
         // Build query string (http_build_query will encode redirect_to again = double encoding)
         $queryString = http_build_query($params);
 
-        $expectedHmac = hash_hmac('sha256', $queryString, config('genuka.client_secret'));
+        $expectedHmac = hash_hmac(
+            "sha256",
+            $queryString,
+            config("genuka.client_secret"),
+        );
 
-        if (! hash_equals($expectedHmac, $hmac)) {
-            throw new \Exception('Invalid HMAC signature');
+        if (!hash_equals($expectedHmac, $hmac)) {
+            throw new \Exception("Invalid HMAC signature");
         }
 
         // Validate timestamp (within 5 minutes)
@@ -87,48 +105,56 @@ class OAuthService
         $timeDifference = abs($currentTime - $requestTime);
 
         if ($timeDifference > 300) {
-            throw new \Exception('Request timestamp expired');
+            throw new \Exception("Request timestamp expired");
         }
     }
 
     /**
-     * Exchange authorization code for access token.
+     * Exchange authorization code for tokens.
+     *
+     * @return array{access_token: string, refresh_token: string, expires_in_minutes: int}
      *
      * @throws \Exception
      */
-    protected function exchangeCodeForToken(string $code): string
+    protected function exchangeCodeForToken(string $code): array
     {
         $http = Http::asForm();
 
         // Disable SSL verification for local development
-        if (app()->environment('local')) {
+        if (app()->environment("local")) {
             $http = $http->withoutVerifying();
         }
 
-        $response = $http->post(config('genuka.url').'/oauth/token', [
-            'grant_type' => 'authorization_code',
-            'code' => $code,
-            'client_id' => config('genuka.client_id'),
-            'client_secret' => config('genuka.client_secret'),
-            'redirect_uri' => config('genuka.redirect_uri'),
+        $response = $http->post(config("genuka.url") . "/oauth/token", [
+            "grant_type" => "authorization_code",
+            "code" => $code,
+            "client_id" => config("genuka.client_id"),
+            "client_secret" => config("genuka.client_secret"),
+            "redirect_uri" => config("genuka.redirect_uri"),
         ]);
 
-        if (! $response->successful()) {
-            Log::error('Token exchange failed', [
-                'status' => $response->status(),
-                'body' => $response->body(),
+        if (!$response->successful()) {
+            Log::error("Token exchange failed", [
+                "status" => $response->status(),
+                "body" => $response->body(),
             ]);
 
-            throw new \Exception('Failed to exchange code for token: '.$response->body());
+            throw new \Exception(
+                "Failed to exchange code for token: " . $response->body(),
+            );
         }
 
         $data = $response->json();
 
-        if (! isset($data['access_token'])) {
-            throw new \Exception('Access token not found in response');
+        if (!isset($data["access_token"])) {
+            throw new \Exception("Access token not found in response");
         }
 
-        return $data['access_token'];
+        return [
+            "access_token" => $data["access_token"],
+            "refresh_token" => $data["refresh_token"] ?? null,
+            "expires_in_minutes" => $data["expires_in_minutes"] ?? 60,
+        ];
     }
 
     /**
@@ -136,8 +162,10 @@ class OAuthService
      *
      * @throws \Exception
      */
-    protected function fetchCompanyInfo(string $companyId, string $accessToken): array
-    {
+    protected function fetchCompanyInfo(
+        string $companyId,
+        string $accessToken,
+    ): array {
         return Genuka::setAccessToken($accessToken)
             ->setCompanyId($companyId)
             ->getCompany($companyId);
@@ -145,24 +173,32 @@ class OAuthService
 
     /**
      * Store or update company in database.
+     *
+     * @param  array{access_token: string, refresh_token: string|null, expires_in_minutes: int}  $tokenData
      */
     protected function storeCompany(
         string $companyId,
         string $code,
-        string $accessToken,
-        array $companyData
+        array $tokenData,
+        array $companyData,
     ): Company {
         return Company::updateOrCreate(
-            ['id' => $companyId],
+            ["id" => $companyId],
             [
-                'handle' => $companyData['handle'] ?? null,
-                'name' => $companyData['name'],
-                'description' => $companyData['description'] ?? null,
-                'logo_url' => $companyData['logo_url'] ?? $companyData['logoUrl'] ?? null,
-                'access_token' => $accessToken,
-                'authorization_code' => $code,
-                'phone' => $companyData['metadata']['contact'] ?? $companyData['phone'] ?? null,
-            ]
+                "handle" => $companyData["handle"] ?? null,
+                "name" => $companyData["name"],
+                "description" => $companyData["description"] ?? null,
+                "logo_url" =>
+                    $companyData["logo_url"] ??
+                    ($companyData["logoUrl"] ?? null),
+                "access_token" => $tokenData["access_token"],
+                "refresh_token" => $tokenData["refresh_token"],
+                "token_expires_at" => now()->addMinutes($tokenData["expires_in_minutes"]),
+                "authorization_code" => $code,
+                "phone" =>
+                    $companyData["metadata"]["contact"] ??
+                    ($companyData["phone"] ?? null),
+            ],
         );
     }
 }
