@@ -18,6 +18,8 @@ return new class extends Migration
             $table->text('description')->nullable();
             $table->string('logo_url')->nullable();
             $table->text('access_token')->nullable();
+            $table->text('refresh_token')->nullable();
+            $table->timestamp('token_expires_at')->nullable();
             $table->string('authorization_code')->nullable();
             $table->string('phone')->nullable();
             $table->timestamps();
