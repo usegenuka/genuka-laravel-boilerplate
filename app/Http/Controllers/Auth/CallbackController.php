@@ -50,17 +50,25 @@ class CallbackController extends Controller
                 redirectTo: $redirectToEncoded // Use encoded value for HMAC
             );
 
-            // Create JWT session (similar to Next.js createSession)
-            $token = $this->sessionService->createSession($company->id);
+            // Create JWT session - returns token and cookie objects
+            $session = $this->sessionService->createSession($company->id);
 
             // Decode redirect_to ONLY for the actual HTTP redirect
             $redirectUrlDecoded = urldecode($validated['redirect_to']);
 
             // Add token as query parameter for frontend to store
-            $redirectUrl = $redirectUrlDecoded.(parse_url($redirectUrlDecoded, PHP_URL_QUERY) ? '&' : '?').'token='.urlencode($token);
+            $redirectUrl = $redirectUrlDecoded.(parse_url($redirectUrlDecoded, PHP_URL_QUERY) ? '&' : '?').'token='.urlencode($session['token']);
 
-            return redirect($redirectUrl)
+            // Build response with cookies attached directly
+            $response = redirect($redirectUrl)
                 ->with('success', 'Successfully connected to Genuka!');
+
+            // Attach cookies to response
+            foreach ($session['cookies'] as $cookie) {
+                $response->withCookie($cookie);
+            }
+
+            return $response;
         } catch (\Exception $e) {
             Log::error('OAuth callback error', [
                 'error' => $e->getMessage(),

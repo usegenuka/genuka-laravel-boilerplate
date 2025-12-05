@@ -16,9 +16,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'auth.genuka' => \App\Http\Middleware\AuthenticateGenuka::class,
         ]);
 
-        // Use custom EncryptCookies middleware to exclude genuka_session
+        // Exclude session cookies from encryption (they're already JWT-encoded)
         $middleware->encryptCookies(except: [
-            'genuka_session',
+            'session',
+            'refresh_session',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

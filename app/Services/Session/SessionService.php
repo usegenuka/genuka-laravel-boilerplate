@@ -10,9 +10,9 @@ use Illuminate\Support\Facades\Log;
 
 class SessionService
 {
-    private const SESSION_COOKIE_NAME = 'session';
+    private const SESSION_COOKIE_NAME = "session";
 
-    private const REFRESH_COOKIE_NAME = 'refresh_session';
+    private const REFRESH_COOKIE_NAME = "refresh_session";
 
     private const SESSION_MAX_AGE = 60 * 60 * 7; // 7 hours in seconds
 
@@ -22,58 +22,60 @@ class SessionService
      * Create both session and refresh cookies for a company.
      * Double cookie pattern for secure session management.
      *
-     * @return string Session JWT token
+     * @return array{token: string, cookies: \Symfony\Component\HttpFoundation\Cookie[]}
      */
-    public function createSession(string $companyId): string
+    public function createSession(string $companyId): array
     {
-        $secret = config('genuka.client_secret');
-        $isProduction = config('app.env') === 'production';
+        $secret = config("genuka.client_secret");
+        $isProduction = config("app.env") === "production";
 
         // Create session token (short-lived: 7h)
         $sessionPayload = [
-            'companyId' => $companyId,
-            'type' => 'session',
-            'iat' => time(),
-            'exp' => time() + self::SESSION_MAX_AGE,
+            "companyId" => $companyId,
+            "type" => "session",
+            "iat" => time(),
+            "exp" => time() + self::SESSION_MAX_AGE,
         ];
-        $sessionToken = JWT::encode($sessionPayload, $secret, 'HS256');
+        $sessionToken = JWT::encode($sessionPayload, $secret, "HS256");
 
         // Create refresh token (long-lived: 30 days)
         $refreshPayload = [
-            'companyId' => $companyId,
-            'type' => 'refresh',
-            'iat' => time(),
-            'exp' => time() + self::REFRESH_MAX_AGE,
+            "companyId" => $companyId,
+            "type" => "refresh",
+            "iat" => time(),
+            "exp" => time() + self::REFRESH_MAX_AGE,
         ];
-        $refreshToken = JWT::encode($refreshPayload, $secret, 'HS256');
+        $refreshToken = JWT::encode($refreshPayload, $secret, "HS256");
 
-        // Set session cookie (7h)
-        Cookie::queue(
+        // Create cookie objects to attach directly to response
+        $sessionCookie = cookie(
             self::SESSION_COOKIE_NAME,
             $sessionToken,
             self::SESSION_MAX_AGE / 60, // Laravel uses minutes
-            '/',
+            "/",
             null,
             $isProduction,
             true, // httpOnly
             false,
-            'lax'
+            "lax",
         );
 
-        // Set refresh cookie (30 days)
-        Cookie::queue(
+        $refreshCookie = cookie(
             self::REFRESH_COOKIE_NAME,
             $refreshToken,
             self::REFRESH_MAX_AGE / 60, // Laravel uses minutes
-            '/',
+            "/",
             null,
             $isProduction,
             true, // httpOnly
             false,
-            'lax'
+            "lax",
         );
 
-        return $sessionToken;
+        return [
+            "token" => $sessionToken,
+            "cookies" => [$sessionCookie, $refreshCookie],
+        ];
     }
 
     /**
@@ -84,16 +86,16 @@ class SessionService
     public function verifyJwt(string $token): ?object
     {
         try {
-            $secret = config('genuka.client_secret');
-            $decoded = JWT::decode($token, new Key($secret, 'HS256'));
+            $secret = config("genuka.client_secret");
+            $decoded = JWT::decode($token, new Key($secret, "HS256"));
 
             return $decoded;
         } catch (\Exception $e) {
             // Don't log expected expiration errors
-            $isExpiredError = str_contains($e->getMessage(), 'Expired');
-            if (! $isExpiredError) {
-                Log::error('JWT verification failed', [
-                    'error' => $e->getMessage(),
+            $isExpiredError = str_contains($e->getMessage(), "Expired");
+            if (!$isExpiredError) {
+                Log::error("JWT verification failed", [
+                    "error" => $e->getMessage(),
                 ]);
             }
 
@@ -111,14 +113,18 @@ class SessionService
     {
         $token = Cookie::get(self::REFRESH_COOKIE_NAME);
 
-        if (! $token) {
+        if (!$token) {
             return null;
         }
 
         $payload = $this->verifyJwt($token);
 
         // Ensure it's a refresh token, not a session token
-        if (! $payload || ! isset($payload->type) || $payload->type !== 'refresh') {
+        if (
+            !$payload ||
+            !isset($payload->type) ||
+            $payload->type !== "refresh"
+        ) {
             return null;
         }
 
@@ -134,13 +140,17 @@ class SessionService
     {
         $token = Cookie::get(self::SESSION_COOKIE_NAME);
 
-        if (! $token) {
+        if (!$token) {
             return null;
         }
 
         $payload = $this->verifyJwt($token);
 
-        if (! $payload || ! isset($payload->type) || $payload->type !== 'session') {
+        if (
+            !$payload ||
+            !isset($payload->type) ||
+            $payload->type !== "session"
+        ) {
             return null;
         }
 
@@ -156,7 +166,7 @@ class SessionService
     {
         $companyId = $this->getCurrentCompanyId();
 
-        if (! $companyId) {
+        if (!$companyId) {
             return null;
         }
 

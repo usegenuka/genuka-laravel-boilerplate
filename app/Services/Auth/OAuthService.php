@@ -112,7 +112,7 @@ class OAuthService
     /**
      * Exchange authorization code for tokens.
      *
-     * @return array{access_token: string, refresh_token: string, expires_in_minutes: int}
+     * @return array{access_token: string, refresh_token: string|null, expires_in_seconds: int}
      *
      * @throws \Exception
      */
@@ -150,10 +150,13 @@ class OAuthService
             throw new \Exception("Access token not found in response");
         }
 
+        // OAuth2 standard returns expires_in in seconds
+        $expiresInSeconds = $data["expires_in"] ?? 3600;
+
         return [
             "access_token" => $data["access_token"],
             "refresh_token" => $data["refresh_token"] ?? null,
-            "expires_in_minutes" => $data["expires_in_minutes"] ?? 60,
+            "expires_in_seconds" => (int) $expiresInSeconds,
         ];
     }
 
@@ -174,7 +177,7 @@ class OAuthService
     /**
      * Store or update company in database.
      *
-     * @param  array{access_token: string, refresh_token: string|null, expires_in_minutes: int}  $tokenData
+     * @param  array{access_token: string, refresh_token: string|null, expires_in_seconds: int}  $tokenData
      */
     protected function storeCompany(
         string $companyId,
@@ -193,7 +196,9 @@ class OAuthService
                     ($companyData["logoUrl"] ?? null),
                 "access_token" => $tokenData["access_token"],
                 "refresh_token" => $tokenData["refresh_token"],
-                "token_expires_at" => now()->addMinutes($tokenData["expires_in_minutes"]),
+                "token_expires_at" => now()->addSeconds(
+                    $tokenData["expires_in_seconds"],
+                ),
                 "authorization_code" => $code,
                 "phone" =>
                     $companyData["metadata"]["contact"] ??

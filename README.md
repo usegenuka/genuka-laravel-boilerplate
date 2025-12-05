@@ -156,35 +156,208 @@ genuka-laravel-boilerplate/
 
 ## Usage
 
-### OAuth Flow
+### OAuth 2.0 Flow
 
-#### 1. Initiate OAuth Flow
-
-Direct users to the Genuka authorization URL with your client credentials:
+This boilerplate implements the **OAuth 2.0 Authorization Code Grant** flow with Genuka. Here's how it works:
 
 ```
-https://api.genuka.com/oauth/authorize?client_id=YOUR_CLIENT_ID&redirect_uri=YOUR_REDIRECT_URI&response_type=code
+┌──────────────┐     ┌──────────────┐     ┌──────────────┐
+│   Your App   │     │    Genuka    │     │  Your Server │
+│  (Frontend)  │     │   (OAuth)    │     │  (Laravel)   │
+└──────┬───────┘     └──────┬───────┘     └──────┬───────┘
+       │                    │                    │
+       │ 1. User clicks     │                    │
+       │    "Install App"   │                    │
+       │───────────────────>│                    │
+       │                    │                    │
+       │ 2. User authorizes │                    │
+       │    on Genuka       │                    │
+       │<───────────────────│                    │
+       │                    │                    │
+       │ 3. Redirect to callback with:          │
+       │    code, company_id, hmac, timestamp   │
+       │────────────────────────────────────────>│
+       │                    │                    │
+       │                    │ 4. Validate HMAC   │
+       │                    │    Exchange code   │
+       │                    │<───────────────────│
+       │                    │                    │
+       │                    │ 5. Return tokens   │
+       │                    │───────────────────>│
+       │                    │                    │
+       │ 6. Redirect with JWT session cookie    │
+       │<────────────────────────────────────────│
+       │                    │                    │
 ```
 
-#### 2. Handle OAuth Callback
+#### Step 1: Initiate OAuth Flow
 
-The callback route (`/api/auth/callback`) automatically:
+Direct users to the Genuka authorization URL. This is typically done from the Genuka App Store or your app's install page:
 
-- Validates the HMAC signature and timestamp
-- Exchanges the authorization code for an access token
-- Fetches company information from Genuka
-- Stores/updates company in the database
-- Redirects to the specified URL or default redirect
+```
+https://api.genuka.com/oauth/authorize?
+    client_id=YOUR_CLIENT_ID&
+    redirect_uri=YOUR_REDIRECT_URI&
+    response_type=code&
+    scope=read_company,write_orders
+```
+
+**Parameters:**
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `client_id` | Yes | Your Genuka OAuth client ID |
+| `redirect_uri` | Yes | Must match exactly with Genuka dashboard |
+| `response_type` | Yes | Always `code` for authorization code flow |
+| `scope` | No | Space-separated list of requested permissions |
+
+#### Step 2: User Authorization
+
+The user is presented with Genuka's authorization page where they can:
+- Review the permissions your app is requesting
+- Select which company to authorize (if they have multiple)
+- Approve or deny the authorization
+
+#### Step 3: Handle OAuth Callback
+
+After authorization, Genuka redirects to your callback URL with these parameters:
 
 **Callback URL**: `GET /api/auth/callback`
 
-**Parameters**:
+**Query Parameters:**
 
-- `code` (required): Authorization code
-- `company_id` (required): Genuka company ID
-- `timestamp` (required): Request timestamp
-- `hmac` (required): Request signature
-- `redirect_to` (optional): Redirect URL after success
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `code` | Yes | One-time authorization code (expires in 5 minutes) |
+| `company_id` | Yes | ULID of the authorized Genuka company |
+| `timestamp` | Yes | Unix timestamp of the request |
+| `hmac` | Yes | HMAC-SHA256 signature for security |
+| `redirect_to` | Yes | URL-encoded destination after success |
+
+**Example callback URL:**
+```
+https://yourapp.com/api/auth/callback?
+    code=abc123&
+    company_id=01hqydxwtxdj3kmzp3bz7jk73g&
+    timestamp=1704067200&
+    hmac=a1b2c3d4e5f6...&
+    redirect_to=https%3A%2F%2Fyourapp.com%2Fdashboard
+```
+
+#### Step 4: HMAC Validation (Critical Security)
+
+The callback validates the HMAC signature to prevent tampering. **This is the most critical security step.**
+
+**IMPORTANT: Double URL Encoding**
+
+Genuka uses a specific HMAC calculation that involves double URL encoding for the `redirect_to` parameter:
+
+```php
+// Genuka's HMAC calculation (what we must match):
+// 1. urlencode(redirect_to) - First encoding
+// 2. http_build_query() - Second encoding of the already-encoded value
+
+// In your Laravel code:
+$params = [
+    'code' => $code,
+    'company_id' => $companyId,
+    'redirect_to' => $redirectTo, // Keep as received (already URL-encoded)
+    'timestamp' => $timestamp,
+];
+
+ksort($params); // Sort alphabetically
+$queryString = http_build_query($params); // This encodes redirect_to again
+
+$expectedHmac = hash_hmac('sha256', $queryString, $clientSecret);
+
+if (!hash_equals($expectedHmac, $receivedHmac)) {
+    throw new Exception('Invalid HMAC signature');
+}
+```
+
+**Common HMAC Mistakes:**
+- Decoding `redirect_to` before validation (breaks double encoding)
+- Not sorting parameters alphabetically
+- Using wrong client secret
+- Not using constant-time comparison (`hash_equals`)
+
+#### Step 5: Token Exchange
+
+After HMAC validation, exchange the authorization code for access tokens:
+
+```php
+POST https://api.genuka.com/oauth/token
+
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code&
+code=abc123&
+client_id=YOUR_CLIENT_ID&
+client_secret=YOUR_CLIENT_SECRET&
+redirect_uri=YOUR_REDIRECT_URI
+```
+
+**Response:**
+```json
+{
+    "token_type": "Bearer",
+    "expires_in": 31536000,
+    "access_token": "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9...",
+    "refresh_token": "def50200..."
+}
+```
+
+**Note:** `expires_in` is in **seconds** (standard OAuth2).
+
+#### Step 6: Session Creation & Redirect
+
+After successful token exchange:
+
+1. Fetch company info from Genuka API
+2. Store company and tokens in database
+3. Create JWT session cookies
+4. Redirect to the decoded `redirect_to` URL
+
+The callback controller handles all of this automatically:
+
+```php
+// CallbackController.php - simplified flow
+$company = $this->oauthService->handleCallback(
+    code: $code,
+    companyId: $companyId,
+    timestamp: $timestamp,
+    hmac: $hmac,
+    redirectTo: $redirectToEncoded // URL-encoded for HMAC
+);
+
+$session = $this->sessionService->createSession($company->id);
+
+return redirect(urldecode($redirectTo)) // Decode for actual redirect
+    ->withCookie($session['cookies'][0])  // session cookie
+    ->withCookie($session['cookies'][1]); // refresh_session cookie
+```
+
+### Protecting Routes with Middleware
+
+Use the `auth.genuka` middleware to protect routes that require authentication:
+
+```php
+// routes/web.php
+Route::middleware(['auth.genuka'])->group(function () {
+    Route::get('/', function () {
+        $company = request()->attributes->get('genuka_company');
+        return view('dashboard', ['company' => $company]);
+    });
+
+    Route::get('/settings', [SettingsController::class, 'index']);
+});
+```
+
+The middleware:
+1. Reads the `session` cookie
+2. Verifies the JWT signature
+3. Fetches the company from database
+4. Attaches company to `$request->attributes`
+5. Returns 401 if not authenticated
 
 ### Using the Genuka Facade
 
